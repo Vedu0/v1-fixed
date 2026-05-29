@@ -1,6 +1,8 @@
 {
   "name": "rfid-inventory-management",
   "version": "1.0.0",
-  "description": "RFID Inventory Management System — ESP32 + Vercel Serverless",
-  "engines": { "node": "20.x" }
+  "engines": { "node": "20.x" },
+  "dependencies": {
+    "mongodb": "^6.3.0"
+  }
 }

@@ -1,33 +1,47 @@
 // api/inventory.js
-// GET  /api/inventory          → list all containers
-// POST /api/inventory          → update capacity for a container
-//   body: { containerId, capacity }
-
 const { handlePreflight } = require('./_cors');
-const { getAll, setCapacity, getLastUpdated } = require('./_store');
+const { getDb } = require('./_db');
 
-module.exports = function handler(req, res) {
+function getStatus(quantity, capacity) {
+  if (!capacity || quantity <= 0) return 'EMPTY';
+  const r = quantity / capacity;
+  if (r >= 1)    return 'FULL';
+  if (r <= 0.25) return 'LOW STOCK';
+  return 'OK';
+}
+
+module.exports = async function handler(req, res) {
   if (handlePreflight(req, res)) return;
 
+  const db         = await getDb();
+  const containers = db.collection('containers');
+
+  // Seed default containers if empty
+  const count = await containers.countDocuments();
+  if (count === 0) {
+    await containers.insertMany([
+      { id: 'c1', name: 'Container A', quantity: 0, capacity: 50, logs: [] },
+      { id: 'c2', name: 'Container B', quantity: 0, capacity: 50, logs: [] },
+      { id: 'c3', name: 'Container C', quantity: 0, capacity: 50, logs: [] },
+      { id: 'c4', name: 'Container D', quantity: 0, capacity: 50, logs: [] },
+    ]);
+  }
+
   if (req.method === 'GET') {
-    return res.status(200).json({
-      success: true,
-      containers: getAll(),
-      lastUpdated: getLastUpdated(),
-    });
+    const docs = await containers.find({}, { projection: { _id: 0 } }).toArray();
+    const data = docs.map(c => ({ ...c, status: getStatus(c.quantity, c.capacity) }));
+    return res.status(200).json({ success: true, containers: data, lastUpdated: new Date().toISOString() });
   }
 
   if (req.method === 'POST') {
     const { containerId, capacity } = req.body || {};
     if (!containerId) return res.status(400).json({ error: 'containerId required' });
     const cap = Number(capacity);
-    if (!Number.isFinite(cap) || cap < 1)
-      return res.status(400).json({ error: 'capacity must be a positive number' });
+    if (!Number.isFinite(cap) || cap < 1) return res.status(400).json({ error: 'invalid capacity' });
 
-    const updated = setCapacity(containerId, cap);
-    if (!updated) return res.status(404).json({ error: 'Container not found' });
-
-    return res.status(200).json({ success: true, container: updated });
+    await containers.updateOne({ id: containerId }, { $set: { capacity: Math.floor(cap) } });
+    const doc = await containers.findOne({ id: containerId }, { projection: { _id: 0 } });
+    return res.status(200).json({ success: true, container: { ...doc, status: getStatus(doc.quantity, doc.capacity) } });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
