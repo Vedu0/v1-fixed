@@ -67,7 +67,7 @@ async function loadInventory(silent = false) {
     containers = data.containers || [];
     renderStats();
     renderContainers();
-    loadRecentActivity();
+    renderActivityFromContainers(containers);
     if (activePanelId) refreshPanelData(activePanelId);
     setStatus('online');
     if (!silent) setLastSync();
@@ -169,13 +169,45 @@ function renderContainers() {
 }
 
 // ── Recent Activity ────────────────────────────────────────────────────────
-async function loadRecentActivity() {
-  try {
-    const data = await apiGet('/api/logs');
-    renderActivityFeed(data.logs || []);
-  } catch (_) {}
-}
+// ── REPLACE these two functions in your script.js ──────────────────────────
 
+async function loadInventory(silent = false) {
+  setStatus('loading');
+    try {
+        const data = await apiGet('/api/inventory');
+            containers = data.containers || [];
+                renderStats();
+                    renderContainers();
+                        // ✅ FIX: build activity feed FROM inventory data — no separate /api/logs call
+                            renderActivityFromContainers(containers);
+                                if (activePanelId) refreshPanelData(activePanelId);
+                                    setStatus('online');
+                                        if (!silent) setLastSync();
+                                          } catch (err) {
+                                              setStatus('offline');
+                                                  if (!silent) showToast('Failed to load inventory: ' + err.message, 'error');
+                                                    }
+                                                    }
+
+                                                    // ✅ NEW: merge all container logs, sort by time, render
+                                                    function renderActivityFromContainers(containers) {
+                                                      const allLogs = containers
+                                                          .flatMap(c =>
+                                                                (c.logs || []).map(l => ({
+                                                                        ...l,
+                                                                                containerName: c.name,
+                                                                                        containerId:   c.id,
+                                                                                              }))
+                                                                                                  )
+                                                                                                      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                                                                                                          .slice(0, 40);
+
+                                                                                                            renderActivityFeed(allLogs);
+                                                                                                            }
+
+                                                                                                            // ── Also fix panelAdd and panelRemove: after each action call renderActivityFromContainers
+                                                                                                            // Replace the loadRecentActivity() call inside panelAdd and panelRemove with:
+                                                                                                            //   renderActivityFromContainers(containers);
 function renderActivityFeed(logs) {
   const list = document.getElementById('activity-list');
   const empty = document.getElementById('activity-empty');
@@ -290,7 +322,7 @@ async function panelAdd() {
     renderContainers();
     renderStats();
     renderPanel(activePanelId);
-    loadRecentActivity();
+    renderActivityFromContainers(containers);
     showToast(`Added ${qty}× ${name} to ${data.container.name}`, 'success');
     flashRfid(`+${qty} ${name}`, null);
   });
@@ -306,7 +338,7 @@ async function panelRemove() {
     renderContainers();
     renderStats();
     renderPanel(activePanelId);
-    loadRecentActivity();
+    renderActivityFromContainers(containers);
     showToast(`Removed ${qty}× ${name} from ${data.container.name}`, 'success');
   });
 }
