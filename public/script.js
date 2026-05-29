@@ -245,14 +245,15 @@ function initPanelClose() {
   document.getElementById('btn-panel-add').onclick      = panelAdd;
   document.getElementById('btn-panel-remove').onclick   = panelRemove;
 }
-
 function openPanel(id) {
-  activePanelId = id;
-  document.getElementById('panel-overlay').classList.add('open');
-  document.getElementById('detail-panel').classList.add('open');
-  renderPanel(id);
-  document.body.style.overflow = 'hidden';
-}
+    activePanelId = id;
+      document.getElementById('panel-overlay').classList.add('open');
+        document.getElementById('detail-panel').classList.add('open');
+          renderPanel(id);
+            document.body.style.overflow = 'hidden';
+              loadInventory(true); // ✅ sync with server on open
+              }
+
 
 function closePanel() {
   activePanelId = null;
@@ -329,19 +330,28 @@ async function panelAdd() {
 }
 
 async function panelRemove() {
-  if (!activePanelId) return;
-  const name = document.getElementById('product-name-input').value.trim() || 'Item';
-  const qty  = parseInt(document.getElementById('qty-input').value, 10) || 1;
-  await withLoading('btn-panel-remove', async () => {
-    const data = await apiPost('/api/remove-product', { containerId: activePanelId, productName: name, quantity: qty });
-    updateContainerInState(data.container);
-    renderContainers();
-    renderStats();
-    renderPanel(activePanelId);
-    renderActivityFromContainers(containers);
-    showToast(`Removed ${qty}× ${name} from ${data.container.name}`, 'success');
-  });
-}
+    if (!activePanelId) return;
+      
+        // ✅ Check locally before hitting API
+          const c = containers.find(c => c.id === activePanelId);
+            if (!c || c.quantity <= 0) {
+                showToast('Container is already empty', 'error');
+                    return;
+                      }
+
+                        const name = document.getElementById('product-name-input').value.trim() || 'Item';
+                          const qty  = parseInt(document.getElementById('qty-input').value, 10) || 1;
+                            await withLoading('btn-panel-remove', async () => {
+                                const data = await apiPost('/api/remove-product', { containerId: activePanelId, productName: name, quantity: qty });
+                                    updateContainerInState(data.container);
+                                        renderContainers();
+                                            renderStats();
+                                                renderPanel(activePanelId);
+                                                    renderActivityFromContainers(containers);
+                                                        showToast(`Removed ${qty}× ${name} from ${data.container.name}`, 'success');
+                                                          });
+                                                          }
+
 
 async function saveCapacity() {
   if (!activePanelId) return;
