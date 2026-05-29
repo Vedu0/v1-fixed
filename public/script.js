@@ -1,29 +1,20 @@
 // script.js — RFID Inventory Management Frontend
-// All API calls use relative paths — works on localhost AND Vercel.
-
 'use strict';
 
-// ── State ─────────────────────────────────────────────────────────────────
-let containers  = [];
+let containers    = [];
 let activePanelId = null;
-let pollTimer   = null;
-const POLL_MS   = 15000;   // background refresh every 15s for RFID updates
+let pollTimer     = null;
+const POLL_MS     = 15000;
 
-// ── API helpers ────────────────────────────────────────────────────────────
 async function apiFetch(url, options = {}) {
-  const defaults = {
-    headers: { 'Content-Type': 'application/json' },
-  };
-  const res = await fetch(url, { ...defaults, ...options });
+  const res  = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
+async function apiGet(path)        { return apiFetch(path); }
+async function apiPost(path, body) { return apiFetch(path, { method: 'POST', body: JSON.stringify(body) }); }
 
-async function apiGet(path)       { return apiFetch(path); }
-async function apiPost(path, body){ return apiFetch(path, { method:'POST', body: JSON.stringify(body) }); }
-
-// ── Bootstrap ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initClock();
   initSidebar();
@@ -32,34 +23,28 @@ document.addEventListener('DOMContentLoaded', () => {
   startPoll();
 });
 
-// ── Clock ──────────────────────────────────────────────────────────────────
 function initClock() {
   const el = document.getElementById('topbar-clock');
   const tick = () => {
-    const now = new Date();
-    el.textContent = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false });
+    el.textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   };
   tick(); setInterval(tick, 1000);
 }
 
-// ── Sidebar nav ────────────────────────────────────────────────────────────
 function initSidebar() {
   document.querySelectorAll('.sidebar-item[data-view]').forEach(item => {
     item.addEventListener('click', () => {
       document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
       item.classList.add('active');
-      // All views are on the same page for now; extend here for multi-view
     });
   });
 }
 
-// ── Poll background ────────────────────────────────────────────────────────
 function startPoll() {
   clearInterval(pollTimer);
-  pollTimer = setInterval(loadInventory, POLL_MS);
+  pollTimer = setInterval(() => loadInventory(true), POLL_MS);
 }
 
-// ── Load inventory ─────────────────────────────────────────────────────────
 async function loadInventory(silent = false) {
   setStatus('loading');
   try {
@@ -79,7 +64,7 @@ async function loadInventory(silent = false) {
 
 function setLastSync() {
   const el = document.getElementById('last-sync');
-  if (el) el.textContent = 'synced ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: false });
+  if (el) el.textContent = 'synced ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function setStatus(state) {
@@ -90,40 +75,31 @@ function setStatus(state) {
   if (text) text.textContent = state === 'online' ? 'ONLINE' : state === 'loading' ? 'SYNCING' : 'OFFLINE';
 }
 
-// ── Stats row ──────────────────────────────────────────────────────────────
 function renderStats() {
-  const total    = containers.length;
   const empty    = containers.filter(c => c.status === 'EMPTY').length;
   const lowStock = containers.filter(c => c.status === 'LOW STOCK').length;
-  const full     = containers.filter(c => c.status === 'FULL').length;
   const totalQty = containers.reduce((s, c) => s + c.quantity, 0);
-
-  setText('stat-total',    total);
-  setText('stat-qty',      totalQty);
-  setText('stat-low',      lowStock);
-  setText('stat-empty',    empty);
-
-  // Sidebar badge
-  const alertCount = lowStock + empty;
+  setText('stat-total', containers.length);
+  setText('stat-qty',   totalQty);
+  setText('stat-low',   lowStock);
+  setText('stat-empty', empty);
   const badge = document.getElementById('sidebar-alert-badge');
   if (badge) {
-    badge.textContent = alertCount;
-    badge.className = 'sidebar-badge' + (alertCount > 0 ? ' alert' : '');
+    const n = lowStock + empty;
+    badge.textContent = n;
+    badge.className   = 'sidebar-badge' + (n > 0 ? ' alert' : '');
   }
 }
 
-// ── Container grid ─────────────────────────────────────────────────────────
 function renderContainers() {
   const grid = document.getElementById('container-grid');
   if (!grid) return;
-
   grid.innerHTML = containers.map((c, i) => {
-    const pct = c.capacity > 0 ? Math.round((c.quantity / c.capacity) * 100) : 0;
+    const pct      = c.capacity > 0 ? Math.round((c.quantity / c.capacity) * 100) : 0;
     const barClass = c.status === 'FULL' ? 'full' : c.status === 'LOW STOCK' ? 'low' : c.status === 'EMPTY' ? 'empty' : '';
     return `
     <div class="container-card" data-id="${c.id}" tabindex="0" role="button"
-         aria-label="Open ${c.name} details"
-         style="animation-delay:${i * 0.05}s">
+         aria-label="Open ${c.name} details" style="animation-delay:${i * 0.05}s">
       <div class="card-header">
         <div>
           <div class="card-name">${escHtml(c.name)}</div>
@@ -149,13 +125,12 @@ function renderContainers() {
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
             <path d="M2 4h12M2 8h8M2 12h10"/>
           </svg>
-          ${c.logs.length} logs
+          ${(c.logs || []).length} logs
         </div>
       </div>
     </div>`;
   }).join('');
 
-  // Event delegation for card clicks & keyboard
   grid.onclick = e => {
     const card = e.target.closest('.container-card');
     if (card) openPanel(card.dataset.id);
@@ -168,59 +143,25 @@ function renderContainers() {
   };
 }
 
-// ── Recent Activity ────────────────────────────────────────────────────────
-// ── REPLACE these two functions in your script.js ──────────────────────────
+function renderActivityFromContainers(containers) {
+  const logs = containers
+    .flatMap(c => (c.logs || []).map(l => ({ ...l, containerName: c.name, containerId: c.id })))
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 40);
+  renderActivityFeed(logs);
+}
 
-async function loadInventory(silent = false) {
-  setStatus('loading');
-    try {
-        const data = await apiGet('/api/inventory');
-            containers = data.containers || [];
-                renderStats();
-                    renderContainers();
-                        // ✅ FIX: build activity feed FROM inventory data — no separate /api/logs call
-                            renderActivityFromContainers(containers);
-                                if (activePanelId) refreshPanelData(activePanelId);
-                                    setStatus('online');
-                                        if (!silent) setLastSync();
-                                          } catch (err) {
-                                              setStatus('offline');
-                                                  if (!silent) showToast('Failed to load inventory: ' + err.message, 'error');
-                                                    }
-                                                    }
-
-                                                    // ✅ NEW: merge all container logs, sort by time, render
-                                                    function renderActivityFromContainers(containers) {
-                                                      const allLogs = containers
-                                                          .flatMap(c =>
-                                                                (c.logs || []).map(l => ({
-                                                                        ...l,
-                                                                                containerName: c.name,
-                                                                                        containerId:   c.id,
-                                                                                              }))
-                                                                                                  )
-                                                                                                      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                                                                                                          .slice(0, 40);
-
-                                                                                                            renderActivityFeed(allLogs);
-                                                                                                            }
-
-                                                                                                            // ── Also fix panelAdd and panelRemove: after each action call renderActivityFromContainers
-                                                                                                            // Replace the loadRecentActivity() call inside panelAdd and panelRemove with:
-                                                                                                            //   renderActivityFromContainers(containers);
 function renderActivityFeed(logs) {
-  const list = document.getElementById('activity-list');
+  const list  = document.getElementById('activity-list');
   const empty = document.getElementById('activity-empty');
   if (!list) return;
-
   if (!logs.length) {
     list.innerHTML = '';
     if (empty) empty.style.display = 'block';
     return;
   }
   if (empty) empty.style.display = 'none';
-
-  list.innerHTML = logs.slice(0, 40).map(l => `
+  list.innerHTML = logs.map(l => `
     <div class="activity-entry">
       <div class="act-type">
         <span class="log-type ${l.source === 'rfid' ? 'RFID' : l.type}">${l.source === 'rfid' ? 'RFID' : l.type}</span>
@@ -235,25 +176,23 @@ function renderActivityFeed(logs) {
     </div>`).join('');
 }
 
-// ── Panel open/close ───────────────────────────────────────────────────────
 function initPanelClose() {
-  document.getElementById('btn-close-panel').onclick = closePanel;
-  document.getElementById('panel-overlay').onclick   = closePanel;
+  document.getElementById('btn-close-panel').onclick  = closePanel;
+  document.getElementById('panel-overlay').onclick    = closePanel;
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && activePanelId) closePanel(); });
-
-  document.getElementById('btn-save-capacity').onclick  = saveCapacity;
-  document.getElementById('btn-panel-add').onclick      = panelAdd;
-  document.getElementById('btn-panel-remove').onclick   = panelRemove;
+  document.getElementById('btn-save-capacity').onclick = saveCapacity;
+  document.getElementById('btn-panel-add').onclick     = panelAdd;
+  document.getElementById('btn-panel-remove').onclick  = panelRemove;
 }
-function openPanel(id) {
-    activePanelId = id;
-      document.getElementById('panel-overlay').classList.add('open');
-        document.getElementById('detail-panel').classList.add('open');
-          renderPanel(id);
-            document.body.style.overflow = 'hidden';
-              loadInventory(true); // ✅ sync with server on open
-              }
 
+function openPanel(id) {
+  activePanelId = id;
+  document.getElementById('panel-overlay').classList.add('open');
+  document.getElementById('detail-panel').classList.add('open');
+  renderPanel(id);
+  document.body.style.overflow = 'hidden';
+  loadInventory(true);
+}
 
 function closePanel() {
   activePanelId = null;
@@ -265,32 +204,33 @@ function closePanel() {
 function refreshPanelData(id) {
   const c = containers.find(c => c.id === id);
   if (!c) return;
-  // Update live stats inside panel without closing
-  document.getElementById('panel-stat-qty').textContent  = c.quantity;
-  document.getElementById('panel-stat-cap').textContent  = c.capacity;
+  document.getElementById('panel-stat-qty').textContent = c.quantity;
+  document.getElementById('panel-stat-cap').textContent = c.capacity;
   const pct = c.capacity > 0 ? Math.round((c.quantity / c.capacity) * 100) : 0;
-  document.getElementById('panel-stat-pct').textContent  = pct + '%';
+  document.getElementById('panel-stat-pct').textContent = pct + '%';
   const badge = document.getElementById('panel-status-badge');
   if (badge) { badge.textContent = c.status; badge.className = 'status-badge ' + c.status; }
+  // ✅ disable remove when empty
+  const removeBtn = document.getElementById('btn-panel-remove');
+  if (removeBtn) removeBtn.disabled = c.quantity <= 0;
   renderPanelLogs(c.logs);
 }
 
 function renderPanel(id) {
   const c = containers.find(c => c.id === id);
   if (!c) return;
-
   document.getElementById('panel-title').textContent    = c.name;
-  document.getElementById('panel-subtitle').textContent = `ID: ${c.id.toUpperCase()} · ${c.logs.length} log entries`;
+  document.getElementById('panel-subtitle').textContent = `ID: ${c.id.toUpperCase()} · ${(c.logs || []).length} log entries`;
   document.getElementById('panel-stat-qty').textContent = c.quantity;
   document.getElementById('panel-stat-cap').textContent = c.capacity;
   const pct = c.capacity > 0 ? Math.round((c.quantity / c.capacity) * 100) : 0;
   document.getElementById('panel-stat-pct').textContent = pct + '%';
-
   const badge = document.getElementById('panel-status-badge');
   if (badge) { badge.textContent = c.status; badge.className = 'status-badge ' + c.status; }
-
   document.getElementById('capacity-input').value = c.capacity;
-
+  // ✅ disable remove when empty
+  const removeBtn = document.getElementById('btn-panel-remove');
+  if (removeBtn) removeBtn.disabled = c.quantity <= 0;
   renderPanelLogs(c.logs);
 }
 
@@ -312,7 +252,6 @@ function renderPanelLogs(logs) {
     </div>`).join('');
 }
 
-// ── Panel actions ──────────────────────────────────────────────────────────
 async function panelAdd() {
   if (!activePanelId) return;
   const name = document.getElementById('product-name-input').value.trim() || 'Item';
@@ -330,28 +269,29 @@ async function panelAdd() {
 }
 
 async function panelRemove() {
-    if (!activePanelId) return;
-      
-        // ✅ Check locally before hitting API
-          const c = containers.find(c => c.id === activePanelId);
-            if (!c || c.quantity <= 0) {
-                showToast('Container is already empty', 'error');
-                    return;
-                      }
+  if (!activePanelId) return;
 
-                        const name = document.getElementById('product-name-input').value.trim() || 'Item';
-                          const qty  = parseInt(document.getElementById('qty-input').value, 10) || 1;
-                            await withLoading('btn-panel-remove', async () => {
-                                const data = await apiPost('/api/remove-product', { containerId: activePanelId, productName: name, quantity: qty });
-                                    updateContainerInState(data.container);
-                                        renderContainers();
-                                            renderStats();
-                                                renderPanel(activePanelId);
-                                                    renderActivityFromContainers(containers);
-                                                        showToast(`Removed ${qty}× ${name} from ${data.container.name}`, 'success');
-                                                          });
-                                                          }
+  // ✅ always fetch fresh state before removing
+  await loadInventory(true);
 
+  const c = containers.find(c => c.id === activePanelId);
+  if (!c || c.quantity <= 0) {
+    showToast('Container is already empty', 'error');
+    return;
+  }
+
+  const name = document.getElementById('product-name-input').value.trim() || 'Item';
+  const qty  = parseInt(document.getElementById('qty-input').value, 10) || 1;
+  await withLoading('btn-panel-remove', async () => {
+    const data = await apiPost('/api/remove-product', { containerId: activePanelId, productName: name, quantity: qty });
+    updateContainerInState(data.container);
+    renderContainers();
+    renderStats();
+    renderPanel(activePanelId);
+    renderActivityFromContainers(containers);
+    showToast(`Removed ${qty}× ${name} from ${data.container.name}`, 'success');
+  });
+}
 
 async function saveCapacity() {
   if (!activePanelId) return;
@@ -367,28 +307,25 @@ async function saveCapacity() {
   });
 }
 
-// ── State helpers ──────────────────────────────────────────────────────────
 function updateContainerInState(updated) {
   const idx = containers.findIndex(c => c.id === updated.id);
   if (idx !== -1) containers[idx] = { ...containers[idx], ...updated };
 }
 
-// ── RFID live indicator ────────────────────────────────────────────────────
 function flashRfid(text, uid) {
-  const el  = document.getElementById('rfid-live');
-  const txt = document.getElementById('rfid-text');
+  const el     = document.getElementById('rfid-live');
+  const txt    = document.getElementById('rfid-text');
   const uid_el = document.getElementById('rfid-uid');
   if (!el) return;
-  if (txt) txt.textContent = text || 'RFID scan received';
+  if (txt)    txt.textContent    = text || 'RFID scan received';
   if (uid_el) uid_el.textContent = uid ? uid.toUpperCase() : '';
   el.classList.add('active');
   clearTimeout(el.__timer);
   el.__timer = setTimeout(() => el.classList.remove('active'), 4000);
 }
 
-// ── Async button helper ────────────────────────────────────────────────────
 async function withLoading(btnId, fn) {
-  const btn = document.getElementById(btnId);
+  const btn  = document.getElementById(btnId);
   const orig = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
@@ -400,7 +337,6 @@ async function withLoading(btnId, fn) {
   }
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
@@ -410,7 +346,6 @@ function showToast(msg, type = 'info') {
   setTimeout(() => el.remove(), 3400);
 }
 
-// ── Utilities ──────────────────────────────────────────────────────────────
 function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -418,10 +353,10 @@ function escHtml(str) {
 function timeAgo(iso) {
   if (!iso) return '—';
   const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
-  if (diff < 5)    return 'just now';
-  if (diff < 60)   return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400)return `${Math.floor(diff/3600)}h ago`;
+  if (diff < 5)     return 'just now';
+  if (diff < 60)    return `${diff}s ago`;
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return new Date(iso).toLocaleDateString();
 }
 
