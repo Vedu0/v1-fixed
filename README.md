@@ -58,7 +58,7 @@ git push
 
 ---
 
-## ESP32 Arduino Firmware
+## ESP32 Firmware
 
 ```cpp
 #include <WiFi.h>
